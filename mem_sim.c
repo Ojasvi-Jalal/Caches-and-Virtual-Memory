@@ -153,10 +153,162 @@ void print_statistics(uint32_t num_virtual_pages, uint32_t num_tlb_tag_bits, uin
  */
  int page_offset = 0;
 
- typedef struct {
+ struct Cache_block{
      int valid_bit;
-     uint32_t tag_bit;
- } cache_t;
+     uint32_t tag;
+
+ };
+ struct Tlb_block{
+     int valid_bit;
+     uint32_t tag;
+     uint32_t phy_address;
+     uint32_t l_r_u;
+ };
+
+ void initialise_lru(struct Tlb_block tlb[]){
+   int i;
+   for(i=0; i<number_of_tlb_entries;i++){
+     tlb[i].l_r_u = i;
+     tlb[i].valid_bit =0;
+   }
+ }
+
+ int get_lru_index(struct Tlb_block tlb[])
+ { int i = 0;
+   int lru_index = 0;
+   for(i=0;i<number_of_tlb_entries;i++){
+     if(tlb[i].l_r_u==0)
+     {
+       lru_index = i;
+     }
+   }
+   return lru_index;
+ }
+ // int get_mru_index(struct Tlb_block tlb[])
+ // { int i = 0;
+ //   int lru_index = 0;
+ //   for(i=0;i<number_of_tlb_entries;i++){
+ //     if(tlb[i].l_r_u==number_of_tlb_entries-1)
+ //     {
+ //       lru_index = i;
+ //     }
+ //   }
+ //   return lru_index;
+ // }
+ void update_lru(struct Tlb_block tlb[],int index){
+   int i;
+   for (i=0;i<number_of_tlb_entries;i++) {
+
+  //    if(get_mru_index(tlb)!=tlb[index].l_r_u && get_lru_index(tlb)!=tlb[index].l_r_u){
+  //       if(i>index)
+  //       {
+  //         tlb[i].l_r_u--;
+  //       }
+  //    }
+  //   else{
+  //         if(i!=index)
+  //           tlb[i].l_r_u--;
+  //  }
+   if(tlb[i].l_r_u >=index)
+     tlb[i].l_r_u--;
+   if(tlb[i].l_r_u ==index)
+       tlb[i].l_r_u = number_of_tlb_entries - 1;
+ }
+
+
+}
+
+ void cache_simulator(struct Cache_block cache[],uint32_t page_address,access_t i_or_d){
+   uint32_t block_address = page_address/cache_block_size;
+   uint32_t block_number = block_address%number_of_cache_blocks;
+   uint32_t number_of_block_bits = 32 - g_num_cache_tag_bits - g_cache_offset_bits;
+   uint32_t tag = page_address>>(g_cache_offset_bits+number_of_block_bits);
+     if(cache[block_number].valid_bit == 0 )
+     {
+           if(i_or_d == data)
+           g_result.cache_data_misses++;
+           else
+           g_result.cache_instruction_misses++;
+           cache[block_number].tag = tag;
+           cache[block_number].valid_bit = 1;
+         }
+         else{
+               if(cache[block_number].tag != tag)
+               {
+                 if(i_or_d == data)
+                   g_result.cache_data_misses++;
+                 else
+                 g_result.cache_instruction_misses++;
+                 cache[block_number].tag = tag;
+               }
+               else{
+                 if(i_or_d == data)
+                 g_result.cache_data_hits++;
+                 else
+                 g_result.cache_instruction_hits++;
+               }
+         }
+
+   }
+
+   void tlb_simulator(struct Tlb_block tlb[], uint32_t virtual_page_number,access_t i_or_d){
+     int i;
+     uint32_t tag = virtual_page_number;
+     int found = 0;
+     initialise_lru(tlb);
+       for(i = 0 ; i< number_of_tlb_entries;i++){
+           if((tlb[i].valid_bit==1)&&(tlb[i].tag == tag)){
+             //tlb[i].l_r_u = number_of_tlb_entries-1;
+            //  int set =
+            //  update_lru(tlb,i);
+            // int j = 0;
+            // for (j=0;j<number_of_tlb_entries;j++) {
+            //   if(tlb[j].l_r_u >=tlb[i].l_r_u)
+            //     tlb[j].l_r_u--;
+            //   if(tlb[j].l_r_u ==tlb[i].l_r_u)
+            //       tlb[j].l_r_u = number_of_tlb_entries - 1;
+            // }
+             //update_lru(tlb,i);
+             int j;
+             for(j = 0;j<number_of_tlb_entries;j++)
+             {
+               if(tlb[j].l_r_u>tlb[i].l_r_u)
+               {
+                 tlb[j].l_r_u--;
+               }
+
+             }
+             tlb[i].l_r_u = number_of_tlb_entries - 1;
+             if(i_or_d == data)
+             g_result.tlb_data_hits++;
+             else
+             g_result.tlb_instruction_hits++;
+             found++;
+             break;
+           }
+         }
+             if(found == 0){
+                    int set = get_lru_index(tlb);
+                    tlb[set].tag = tag;
+                    tlb[set].valid_bit = 1;
+                    tlb[set].phy_address = dummy_translate_virtual_page_num(virtual_page_number);
+                    //tlb[set].l_r_u = number_of_tlb_entries-1;
+                    //update_lru(tlb,set);
+                    for(int z = 0;z<number_of_tlb_entries;z++)
+                    {
+                      if(tlb[z].l_r_u>tlb[set].l_r_u)
+                         tlb[z].l_r_u--;
+                    }
+                    tlb[set].l_r_u = number_of_tlb_entries-1;
+                    if(i_or_d == data)
+                      g_result.tlb_data_misses++;
+                    else
+                      g_result.tlb_instruction_misses++;
+             }
+
+
+
+}
 
 int main(int argc, char** argv) {
 
@@ -245,12 +397,12 @@ int main(int argc, char** argv) {
      * Use the following snippet and add your code to finish the task. */
 
     /* You may want to setup your TLB and/or Cache structure here. */
-    cache_t *cache;
-    int n = number_of_cache_blocks;
-    g_total_num_virtual_pages = 32 - log2(page_size);
-    cache = malloc(n*sizeof(cache *));
+    struct Cache_block cache[number_of_cache_blocks];
+    struct Tlb_block tlb[number_of_tlb_entries];
+    g_total_num_virtual_pages = pow(2,32 - log2(page_size));
+    //cache = malloc(n*sizeof(cache_block_t));
     if ( hierarchy_type != tlb_only) {
-      int index = log2(n);
+      int index = log2(number_of_cache_blocks);
       g_cache_offset_bits= log2(cache_block_size);
       g_num_cache_tag_bits = 32-(g_cache_offset_bits+index);
    }
@@ -258,7 +410,16 @@ int main(int argc, char** argv) {
        g_tlb_offset_bits  = log2(page_size);
        g_num_tlb_tag_bits = 32 - g_tlb_offset_bits;
     }
-
+    int i = 0;
+    for(i=0;i<number_of_cache_blocks;i++)
+    {
+      cache[i].valid_bit = 0;
+    }
+    int j = 0;
+    for(i=0;i<number_of_tlb_entries;i++)
+    {
+      tlb[i].valid_bit = 0;
+    }
     mem_access_t access;
     /* Loop until the whole trace file has been read. */
     while(1) {
@@ -268,16 +429,27 @@ int main(int argc, char** argv) {
             break;
         /* Add your code here */
         /* Feed the address to your TLB and/or Cache simulator and collect statistics. */
-        page_offset = log2(page_size);
-        v_p_n = access.address>>page_offset;
-        page_num = dummy_translate_virtual_page_num(v_p_n);
-        offset = access.address & ((1<<x)-1); //check this on stack
-        page_address = page_num+offset;
+        uint32_t no_of_offset_bits = log2(page_size);
+        uint32_t no_of_virtual_page_no_bits = 32-log2(page_size);
+        uint32_t virtual_page_number = access.address>>no_of_offset_bits;
+        uint32_t phy_page_num = dummy_translate_virtual_page_num(virtual_page_number);
+        phy_page_num = phy_page_num << no_of_offset_bits;
+        uint32_t offset_content = access.address << no_of_virtual_page_no_bits;
+        offset_content = offset_content >> no_of_virtual_page_no_bits;
+        phy_page_num = phy_page_num|offset_content;
         if(hierarchy_type != tlb_only)
         {
-          cache_simulator(cache,page_address,access.address,g_result);
+          cache_simulator(cache,phy_page_num,access.accesstype);
         }
-    }
+        if(hierarchy_type != cache_only){
+          tlb_simulator(tlb,virtual_page_number,access.accesstype);
+        }
+    //     for(int i=0;i<number_of_tlb_entries;i++){
+    //       printf("%u lru\n",tlb[i].l_r_u );
+    //
+    // }
+    // printf("\n");
+     }
 
     /* Do not modify code below. */
     /* Make sure that all the parameters are appropriately populated. */
