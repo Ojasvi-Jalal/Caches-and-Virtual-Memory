@@ -151,7 +151,12 @@ void print_statistics(uint32_t num_virtual_pages, uint32_t num_tlb_tag_bits, uin
  * Add any global variables and/or functions here as you wish.
  *
  */
+ int page_offset = 0;
 
+ typedef struct {
+     int valid_bit;
+     uint32_t tag_bit;
+ } cache_t;
 
 int main(int argc, char** argv) {
 
@@ -240,13 +245,20 @@ int main(int argc, char** argv) {
      * Use the following snippet and add your code to finish the task. */
 
     /* You may want to setup your TLB and/or Cache structure here. */
-    typedef struct {
-        int valid_bit;
-        uint32_t tag_bit;
-    } cache_t;
     cache_t *cache;
-    n = (cache_block_size+)
+    int n = number_of_cache_blocks;
+    g_total_num_virtual_pages = 32 - log2(page_size);
     cache = malloc(n*sizeof(cache *));
+    if ( hierarchy_type != tlb_only) {
+      int index = log2(n);
+      g_cache_offset_bits= log2(cache_block_size);
+      g_num_cache_tag_bits = 32-(g_cache_offset_bits+index);
+   }
+    else if( hierarchy_type != cache_only) {
+       g_tlb_offset_bits  = log2(page_size);
+       g_num_tlb_tag_bits = 32 - g_tlb_offset_bits;
+    }
+
     mem_access_t access;
     /* Loop until the whole trace file has been read. */
     while(1) {
@@ -256,7 +268,15 @@ int main(int argc, char** argv) {
             break;
         /* Add your code here */
         /* Feed the address to your TLB and/or Cache simulator and collect statistics. */
-
+        page_offset = log2(page_size);
+        v_p_n = access.address>>page_offset;
+        page_num = dummy_translate_virtual_page_num(v_p_n);
+        offset = access.address & ((1<<x)-1); //check this on stack
+        page_address = page_num+offset;
+        if(hierarchy_type != tlb_only)
+        {
+          cache_simulator(cache,page_address,access.address,g_result);
+        }
     }
 
     /* Do not modify code below. */
