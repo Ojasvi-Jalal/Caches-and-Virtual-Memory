@@ -175,7 +175,7 @@ void print_statistics(uint32_t num_virtual_pages, uint32_t num_tlb_tag_bits, uin
 
  int get_lru_index(struct Tlb_block tlb[])
  { int i = 0;
-   int lru_index = 0;
+   int lru_index;
    for(i=0;i<number_of_tlb_entries;i++){
      if(tlb[i].l_r_u==0)
      {
@@ -184,36 +184,18 @@ void print_statistics(uint32_t num_virtual_pages, uint32_t num_tlb_tag_bits, uin
    }
    return lru_index;
  }
- // int get_mru_index(struct Tlb_block tlb[])
- // { int i = 0;
- //   int lru_index = 0;
- //   for(i=0;i<number_of_tlb_entries;i++){
- //     if(tlb[i].l_r_u==number_of_tlb_entries-1)
- //     {
- //       lru_index = i;
- //     }
- //   }
- //   return lru_index;
- // }
- void update_lru(struct Tlb_block tlb[],int index){
-   int i;
-   for (i=0;i<number_of_tlb_entries;i++) {
 
-  //    if(get_mru_index(tlb)!=tlb[index].l_r_u && get_lru_index(tlb)!=tlb[index].l_r_u){
-  //       if(i>index)
-  //       {
-  //         tlb[i].l_r_u--;
-  //       }
-  //    }
-  //   else{
-  //         if(i!=index)
-  //           tlb[i].l_r_u--;
-  //  }
-   if(tlb[i].l_r_u >=index)
-     tlb[i].l_r_u--;
-   if(tlb[i].l_r_u ==index)
-       tlb[i].l_r_u = number_of_tlb_entries - 1;
- }
+ void update_lru(struct Tlb_block tlb[],int index){
+
+   int j;
+   for(j = 0;j<number_of_tlb_entries;j++)
+   {
+     if(tlb[j].l_r_u>tlb[index].l_r_u)
+     {
+       tlb[j].l_r_u -= 1;
+     }
+
+   }
 
 
 }
@@ -255,29 +237,10 @@ void print_statistics(uint32_t num_virtual_pages, uint32_t num_tlb_tag_bits, uin
      int i;
      uint32_t tag = virtual_page_number;
      int found = 0;
-     initialise_lru(tlb);
+
        for(i = 0 ; i< number_of_tlb_entries;i++){
            if((tlb[i].valid_bit==1)&&(tlb[i].tag == tag)){
-             //tlb[i].l_r_u = number_of_tlb_entries-1;
-            //  int set =
-            //  update_lru(tlb,i);
-            // int j = 0;
-            // for (j=0;j<number_of_tlb_entries;j++) {
-            //   if(tlb[j].l_r_u >=tlb[i].l_r_u)
-            //     tlb[j].l_r_u--;
-            //   if(tlb[j].l_r_u ==tlb[i].l_r_u)
-            //       tlb[j].l_r_u = number_of_tlb_entries - 1;
-            // }
-             //update_lru(tlb,i);
-             int j;
-             for(j = 0;j<number_of_tlb_entries;j++)
-             {
-               if(tlb[j].l_r_u>tlb[i].l_r_u)
-               {
-                 tlb[j].l_r_u--;
-               }
-
-             }
+             update_lru(tlb,i);
              tlb[i].l_r_u = number_of_tlb_entries - 1;
              if(i_or_d == data)
              g_result.tlb_data_hits++;
@@ -289,17 +252,12 @@ void print_statistics(uint32_t num_virtual_pages, uint32_t num_tlb_tag_bits, uin
          }
              if(found == 0){
                     int set = get_lru_index(tlb);
+
                     tlb[set].tag = tag;
                     tlb[set].valid_bit = 1;
                     tlb[set].phy_address = dummy_translate_virtual_page_num(virtual_page_number);
-                    //tlb[set].l_r_u = number_of_tlb_entries-1;
-                    //update_lru(tlb,set);
-                    for(int z = 0;z<number_of_tlb_entries;z++)
-                    {
-                      if(tlb[z].l_r_u>tlb[set].l_r_u)
-                         tlb[z].l_r_u--;
-                    }
-                    tlb[set].l_r_u = number_of_tlb_entries-1;
+                    update_lru(tlb,set);
+                    tlb[set].l_r_u = number_of_tlb_entries - 1;
                     if(i_or_d == data)
                       g_result.tlb_data_misses++;
                     else
@@ -399,6 +357,7 @@ int main(int argc, char** argv) {
     /* You may want to setup your TLB and/or Cache structure here. */
     struct Cache_block cache[number_of_cache_blocks];
     struct Tlb_block tlb[number_of_tlb_entries];
+    initialise_lru(tlb);
     g_total_num_virtual_pages = pow(2,32 - log2(page_size));
     //cache = malloc(n*sizeof(cache_block_t));
     if ( hierarchy_type != tlb_only) {
@@ -432,23 +391,25 @@ int main(int argc, char** argv) {
         uint32_t no_of_offset_bits = log2(page_size);
         uint32_t no_of_virtual_page_no_bits = 32-log2(page_size);
         uint32_t virtual_page_number = access.address>>no_of_offset_bits;
-        uint32_t phy_page_num = dummy_translate_virtual_page_num(virtual_page_number);
+          uint32_t phy_page_num;
+          if(hierarchy_type != tlb_only){
+                  phy_page_num = dummy_translate_virtual_page_num(virtual_page_number);}
         phy_page_num = phy_page_num << no_of_offset_bits;
         uint32_t offset_content = access.address << no_of_virtual_page_no_bits;
         offset_content = offset_content >> no_of_virtual_page_no_bits;
         phy_page_num = phy_page_num|offset_content;
+
         if(hierarchy_type != tlb_only)
         {
+
+
+
           cache_simulator(cache,phy_page_num,access.accesstype);
         }
         if(hierarchy_type != cache_only){
           tlb_simulator(tlb,virtual_page_number,access.accesstype);
         }
-    //     for(int i=0;i<number_of_tlb_entries;i++){
-    //       printf("%u lru\n",tlb[i].l_r_u );
-    //
-    // }
-    // printf("\n");
+
      }
 
     /* Do not modify code below. */
